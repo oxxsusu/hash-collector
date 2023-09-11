@@ -1,3 +1,5 @@
+import time
+
 import pandas as pd
 import requests
 import re
@@ -35,9 +37,10 @@ def get_hashtag_id(userid, token, keyword):
 # requests에 대한 response 처리
 def process_data(response):
     data = response.get('data')
-    for d in range(len(data)):  # caption 항목이 없는 경우가 있음
-        if data[d].get('caption'):  # 이스케이프 문자 제거
-            data[d]['caption'] = re.sub(r"(\n)|(\r)", "", data[d]['caption'])
+    if data:
+        for d in range(len(data)):  # caption 항목이 없는 경우가 있음
+            if data[d].get('caption'):  # 이스케이프 문자 제거
+                data[d]['caption'] = re.sub(r"(\n)|(\r)", "", data[d]['caption'])
     data_list.extend(data)
 
 # API 호출부
@@ -56,7 +59,7 @@ def get_media(userid, token, keyword, standard, page):
         "user_id": userid,
         "fields": "caption, children, comments_count, id, like_count, media_type, media_url, permalink, timestamp",
         "access_token": token,
-        # "limit": 50
+        "limit": 50
     }
     hashtag_id = get_hashtag_id(userid, token, keyword)
     base_url = f"https://graph.facebook.com/v17.0/{hashtag_id}/{standard}_media"
@@ -76,13 +79,16 @@ def get_media(userid, token, keyword, standard, page):
         next_url = paging.get('next')
         next_response = requests.get(next_url).json()
         process_data(next_response)
+        paging = next_response.get('paging')
+        cursors = paging.get('cursors')
+
 
     # .csv 처리
     df = pd.DataFrame(data_list)
     df = df.fillna('')  # 누락된 값이 있으면 빈 문자열로 fill
-    df.to_csv(f'instagram-#{hashtag_id}-page-{page}-orderby-{standard}.csv')
+    df.to_csv(f'{hashtag_id}-page-{page}-orderby-{standard}.csv')
 
-    filename = f'instagram-#{hashtag_id}-page-{page}-orderby-{standard}.csv'
+    filename = f'{hashtag_id}-page-{page}-orderby-{standard}.csv'
     print(f"데이터 저장을 완료했습니다.\n파일명: {filename}")
     return filename
 
@@ -104,10 +110,14 @@ root.geometry("500x700")
 
 # 사용할 변수
 standard = StringVar()
+standard.initialize("recent")
 widgets = []            # 위젯 저장용
 widget_values = []      # 위젯값 저장용
 # start 버튼 클릭 event
 def btn_get_values():
+    # 실행시간 측정용
+    start_time = time.time()
+
     # 초기 위젯값 초기화
     widget_values.clear()
 
@@ -118,8 +128,14 @@ def btn_get_values():
     print(f"입력받은 값 : {widget_values}")
     filename = get_media(widget_values[0], widget_values[1], widget_values[2], widget_values[3], int(widget_values[4]))
 
+    # 함수 실행 후 종료시간 측정
+    end_time = time.time()
+    process_time = end_time - start_time
+    phour, pmin = round(process_time//360), process_time%360
+    pmin, psec = round(pmin//60), round(pmin%60)
+
     success_label = Label(root, font=("", 30), text=f"Success! 🥳")
-    result_label = Label(root, text=f"Data you requested has been saved.\n(*{filename})")
+    result_label = Label(root, text=f"Data you requested has been saved.\nExecution time : {phour}h {pmin}m {psec}s\nFile name : (*{filename})")
     failure_label =  Label(root, font=("", 20), text=f"⚠️ Error : Something went wrong.")
 
     # 예고(?) 창 먼저 지우고
@@ -159,11 +175,15 @@ token_frame = Frame(root, width=400, height=100)
 id_label = Label(token_frame, justify="left", text="User Id: ")
 id_label.grid(row=0, column=0, padx=2, pady=2)
 id_entry = Entry(token_frame)
+# 기본값 설정 (테스트용)
+id_entry.insert(0, "17841461849509553")
 widgets.append(id_entry)
 id_entry.grid(row=0, column=1, columnspan=2, pady=2, padx=2)
 token_label = Label(token_frame, justify="left", text="Access Token: ")
 token_label.grid(row=1, column=0, padx=2, pady=2)
 token_entry = Entry(token_frame)
+# 기본값 설정 (테스트용)
+token_entry.insert(0, "EAAG5hzKyxakBOzS3Ktn4ad0OZAgRmmZArWQZB6efz0W9u6kWiVEWGTTchVmwxYpHwyDzQYH2d2i2CZCKHTAEkmqTLguc0CTp0kFZBUAUX49ZB8PsziHOAtnEHGMAO1J3EGHJUhpUXYlarsCAYcZCprQ7Y1rAgjyvDokNxltItR3oaCRcRgqgqyJQX7oFiyqedmyjIZC1DB6v69ekUIQV0ZAMGyMZAV2XMDgRYvHhDW5cTYnofr645P8L1g")
 widgets.append(token_entry)
 token_entry.grid(row=1, column=1, columnspan=2, pady=2, padx=2)
 token_frame.pack()
